@@ -1,0 +1,65 @@
+diff --git a/generative_recommenders/ops/triton/triton_ragged_hstu_attention.py b/generative_recommenders/ops/triton/triton_ragged_hstu_attention.py
+index 3a36214..4c8baed 100644
+--- a/generative_recommenders/ops/triton/triton_ragged_hstu_attention.py
++++ b/generative_recommenders/ops/triton/triton_ragged_hstu_attention.py
+@@ -230,6 +230,13 @@ def _get_fw_configs() -> List[triton.Config]:  # noqa: C901
+                 num_warps=8,
+             ),
+         ]
++    configs = [
++            triton.Config(
++                {"BLOCK_M": 64, "BLOCK_N": 64},
++                num_stages=2,
++                num_warps=4,
++            ),
++    ]
+     return configs
+ 
+ 
+@@ -2073,6 +2080,14 @@ def _get_bw_configs() -> List[triton.Config]:
+             pre_hook=_bwd_pre_hook,
+         ),
+     ]
++    configs = [
++        triton.Config(
++            {"BLOCK_M": 32, "BLOCK_N": 128, "SEQUENCE_PARALLEL": False, "UNROLL": 1},
++            num_stages=3,
++            num_warps=8,
++            pre_hook=_bwd_pre_hook,
++        ),
++    ]
+     return configs
+ 
+ 
+@@ -3121,8 +3136,15 @@ def triton_ragged_attention_relative_bias_fwd(
+         CONTEXTUAL_SEQ_LEN=contextual_seq_len or 0,
+         HAS_SORT_BY_LENGTH_INDICES=has_sort_by_length_indices,
+     )
++    print_once(_ragged_hstu_attn_fwd.best_config)
+     return out
+ 
++from functools import lru_cache
++
++@lru_cache(None)
++def print_once(s):
++    print(s)
++
+ 
+ def triton_ragged_attention_relative_bias_bwd(
+     dout: torch.Tensor,
+@@ -3264,6 +3286,7 @@ def triton_ragged_attention_relative_bias_bwd(
+             num_stages=2,
+             num_warps=2,
+         )
++    #print_once(_attn_bias_bwd.best_config)
+     grid = lambda meta: (  # noqa E731
+         Z * H,
+         (triton.cdiv(N, meta["BLOCK_N"]) if meta["SEQUENCE_PARALLEL"] else 1),
+@@ -3340,6 +3363,7 @@ def triton_ragged_attention_relative_bias_bwd(
+         BLOCK_D_V=DimV,
+         HAS_SORT_BY_LENGTH_INDICES=sort_by_length_indices is not None,
+     )
++    print_once(_ragged_hstu_attn_bwd.best_config)
+     return (
+         dq,
+         dk,
